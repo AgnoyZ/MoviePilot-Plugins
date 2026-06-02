@@ -1,0 +1,25 @@
+
+.media-openlist-upload-config[data-v-e252453d] {
+  width: 100%;
+  overflow-x: hidden;
+}
+.gap-2[data-v-e252453d] {
+  gap: 8px;
+}
+.gap-3[data-v-e252453d] {
+  gap: 12px;
+}
+.min-w-0[data-v-e252453d] {
+  min-width: 0;
+}
+.border-t-sm[data-v-e252453d] {
+  border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+.bg-surface[data-v-e252453d] {
+  background: rgb(var(--v-theme-surface));
+}
+@media (min-width: 600px) {
+.w-sm-auto[data-v-e252453d] {
+    width: auto !important;
+}
+}
