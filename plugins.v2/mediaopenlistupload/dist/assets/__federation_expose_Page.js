@@ -48,6 +48,8 @@ const _sfc_main = {
   props: {
   api: { type: [Object, Function], default: null },
   pluginId: { type: String, default: '' },
+  page: { type: [Object, Array], default: () => ({}) },
+  config: { type: [Object, Array], default: () => [] },
 },
   emits: ['action', 'switch', 'close'],
   setup(__props, { emit: __emit }) {
@@ -106,6 +108,22 @@ const loadTasks = async () => {
     const result = await callApi('get', apiPath('/tasks?page_size=50'));
     const items = result?.items || result?.data?.items || [];
     tasks.value = Array.isArray(items) ? items : [];
+
+    if (tasks.value.length === 0) {
+      let fallbackTasks = [];
+      if (Array.isArray(props.page?.tasks)) {
+        fallbackTasks = props.page.tasks;
+      } else if (Array.isArray(props.config) && props.config[0]?.props?.items) {
+        fallbackTasks = props.config[0].props.items;
+      } else if (props.config?.tasks?.length) {
+        fallbackTasks = props.config.tasks;
+      }
+
+      if (fallbackTasks.length > 0) {
+        tasks.value = fallbackTasks;
+      }
+    }
+
     if (selectedTask.value) {
       const freshTask = tasks.value.find((task) => task.id === selectedTask.value.id);
       selectedTask.value = freshTask || null;
@@ -412,6 +430,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Page = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-ed00ec63"]]);
+const Page = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-ec30dfe0"]]);
 
 export { Page as default };
