@@ -2,11 +2,12 @@
     "MediaOpenListUpload": {
         "name": "媒体整理OpenList上传",
         "description": "在 MoviePilot 整理媒体文件后，按规则将整理出的媒体库文件上传到 OpenList 指定目录。",
-        "version": "1.27",
+        "version": "1.28",
         "icon": "cloud.png",
         "author": "ALBUM",
         "level": 1,
         "history": {
+            "v1.28": "将扫描并同步目录文件的范围改回任务 source_dir，避免多季电视剧误扫描并上传其他季文件。",
             "v1.27": "结果页详情新增扫描并同步目录文件按钮，支持按规则目录下的项目根目录递归扫描并补传字幕、刮削等文件。",
             "v1.26": "修正 OpenList API 直连上传错误调用缺失方法，并在秒传失败后自动回退普通上传。",
             "v1.25": "修正插件热重载后结果接口可能仍走旧实例旧数据库会话的问题，任务历史读写改为每次使用新的 PluginDataOper。",

@@ -306,7 +306,7 @@ class MediaOpenListUpload(_PluginBase):
     plugin_desc = "在 MoviePilot 整理媒体文件后，按规则将媒体文件上传到 OpenList。"
     plugin_icon = "cloud.png"
     plugin_color = "#1976D2"
-    plugin_version = "1.27"
+    plugin_version = "1.28"
     plugin_author = "ALBUM"
     author_url = ""
     plugin_config_prefix = "mediaopenlistupload_"
@@ -482,7 +482,7 @@ class MediaOpenListUpload(_PluginBase):
         rule = self._match_rule(media_path)
         if not rule:
             return
-        source_dir = self._project_root_dir(media_path, rule)
+        source_dir = media_path.parent if media_path.is_file() else media_path
         batch_key = f"{rule['_id']}::{source_dir.as_posix()}"
         with self._lock:
             batch = self._pending_batches.setdefault(
@@ -770,7 +770,7 @@ class MediaOpenListUpload(_PluginBase):
         source_dir_text = str(task.get("source_dir") or "").strip()
         if not source_dir_text:
             raise RuntimeError("task source_dir not found")
-        source_dir = self._project_root_dir(Path(source_dir_text), rule)
+        source_dir = Path(source_dir_text)
         files = self._collect_files(source_dir, rule)
         if task.get("status") == "failed":
             original_paths = [
@@ -860,20 +860,6 @@ class MediaOpenListUpload(_PluginBase):
         if source_dir.name.lower().startswith("season ") and source_dir.parent.name:
             return source_dir.parent.name
         return source_dir.name or source_dir.as_posix()
-
-    def _project_root_dir(self, path: Path, rule: Dict[str, Any]) -> Path:
-        media_dir_text = str(rule.get("media_dir") or "").strip()
-        base_path = path.parent if path.is_file() else path
-        if not media_dir_text:
-            return base_path
-        media_dir = Path(media_dir_text)
-        try:
-            relative = base_path.resolve().relative_to(media_dir.resolve())
-        except Exception:
-            return base_path
-        if not relative.parts:
-            return base_path
-        return media_dir / relative.parts[0]
 
     def _extract_media_title(self, data: Any) -> str:
         candidates: List[str] = []
