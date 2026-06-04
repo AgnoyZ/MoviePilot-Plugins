@@ -160,6 +160,44 @@ class DirectOpenListClient:
         except Exception:
             return False
 
+    def _cached_file_hashes(self, local_path: Path) -> Dict[str, str]:
+        stat = local_path.stat()
+        cache_key = (local_path.as_posix(), stat.st_size, int(stat.st_mtime))
+        with self._hash_lock:
+            hashes = self._hash_cache.get(cache_key)
+            if hashes is None:
+                hashes = self._file_hashes(local_path)
+                self._hash_cache = {cache_key: hashes}
+            return hashes
+
+    def _parent_dir(self, remote_path: str) -> str:
+        parent = posixpath.dirname(str(remote_path or "").replace("\\", "/"))
+        if not parent:
+            return "/"
+        return parent if parent.startswith("/") else f"/{parent}"
+
+    def _ensure_remote_dir(self, remote_path: str):
+        remote_dir = self._parent_dir(remote_path)
+        if remote_dir in ("", "/"):
+            return
+        try:
+            self._request_json("POST", "/api/fs/mkdir", {"path": remote_dir})
+        except Exception as err:
+            if not self.exists(remote_dir):
+                raise RuntimeError(f"获取或创建 OpenList 目录失败: {remote_dir}") from err
+
+    def _next_available_remote_path(self, remote_path: str) -> str:
+        directory = self._parent_dir(remote_path)
+        filename = posixpath.basename(remote_path)
+        stem, suffix = posixpath.splitext(filename)
+        index = 1
+        while True:
+            candidate = f"{stem} ({index}){suffix}"
+            candidate_path = posixpath.join(directory.rstrip("/") or "/", candidate)
+            if not self.exists(candidate_path):
+                return candidate_path
+            index += 1
+
     def _file_hashes(self, local_path: Path) -> Dict[str, str]:
         import hashlib
 
@@ -230,7 +268,7 @@ class DirectOpenListClient:
         }
 
     def upload(self, local_path: Path, remote_path: str, overwrite: str) -> Dict[str, Any]:
-        storage, remote_dir, remote_name = self._prepare_target(remote_path)
+        local_path = Path(local_path)
         if overwrite == "skip" and self.exists(remote_path):
             return {
                 "status": "skipped",
@@ -240,31 +278,27 @@ class DirectOpenListClient:
         if overwrite == "rename" and self.exists(remote_path):
             original_remote_path = remote_path
             remote_path = self._next_available_remote_path(remote_path)
-            storage, remote_dir, remote_name = self._prepare_target(remote_path)
             logger.info(
                 f"媒体整理 OpenList 上传：目标文件已存在，改为重命名上传 original={original_remote_path} renamed={remote_path}"
             )
-        try:
-            storage.makedirs(remote_dir)
-        except Exception as err:
-            raise RuntimeError(f"\u83b7\u53d6\u6216\u521b\u5efa OpenList \u76ee\u5f55\u5931\u8d25: {remote_dir}") from err
-        if overwrite == "overwrite" and self.exists(remote_path):
+        self._ensure_remote_dir(remote_path)
+        rapid_hashes = self._cached_file_hashes(local_path)
+        last_error = None
+        for _ in range(max(RAPID_UPLOAD_ATTEMPTS, 1)):
             try:
-                storage.remove(remote_path)
+                return self._upload_once(local_path, remote_path, overwrite, rapid_hashes=rapid_hashes)
             except Exception as err:
-                raise RuntimeError(f"\u76ee\u6807\u6587\u4ef6\u5df2\u5b58\u5728\u4e0a\u4f20\u5931\u8d25?: {remote_path}") from err
+                last_error = err
+        if last_error:
+            logger.warning(
+                f"媒体整理 OpenList 上传：秒传失败，回退普通上传 remote={remote_path} error={last_error}"
+            )
         try:
-            result = storage.upload_file(local_path.as_posix(), remote_dir)
-        except TypeError:
-            result = storage.upload_file(local_path.as_posix(), remote_path)
-        if not result:
-            raise RuntimeError(f"OpenList \u4e0a\u4f20\u5931\u8d25: {local_path}")
-        return {
-            "status": "success",
-            "remote_path": remote_path,
-            "message": "",
-            "upload_mode": "storage",
-        }
+            return self._upload_once(local_path, remote_path, overwrite, rapid_hashes=None)
+        except Exception as err:
+            if last_error:
+                raise RuntimeError(f"{err}; rapid_error={last_error}") from err
+            raise
 
 
 class MediaOpenListUpload(_PluginBase):
@@ -272,7 +306,7 @@ class MediaOpenListUpload(_PluginBase):
     plugin_desc = "在 MoviePilot 整理媒体文件后，按规则将媒体文件上传到 OpenList。"
     plugin_icon = "cloud.png"
     plugin_color = "#1976D2"
-    plugin_version = "1.25"
+    plugin_version = "1.26"
     plugin_author = "ALBUM"
     author_url = ""
     plugin_config_prefix = "mediaopenlistupload_"
