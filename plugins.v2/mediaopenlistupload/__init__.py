@@ -306,7 +306,7 @@ class MediaOpenListUpload(_PluginBase):
     plugin_desc = "在 MoviePilot 整理媒体文件后，按规则将媒体文件上传到 OpenList。"
     plugin_icon = "cloud.png"
     plugin_color = "#1976D2"
-    plugin_version = "1.26"
+    plugin_version = "1.27"
     plugin_author = "ALBUM"
     author_url = ""
     plugin_config_prefix = "mediaopenlistupload_"
@@ -383,6 +383,13 @@ class MediaOpenListUpload(_PluginBase):
                 "endpoint": self.api_retry_task,
                 "methods": ["POST"],
                 "summary": "重试失败任务",
+                "auth": "bear",
+            },
+            {
+                "path": "/tasks/{task_id}/rescan",
+                "endpoint": self.api_rescan_task,
+                "methods": ["POST"],
+                "summary": "扫描并同步目录文件",
                 "auth": "bear",
             },
             {
@@ -475,7 +482,7 @@ class MediaOpenListUpload(_PluginBase):
         rule = self._match_rule(media_path)
         if not rule:
             return
-        source_dir = media_path.parent if media_path.is_file() else media_path
+        source_dir = self._project_root_dir(media_path, rule)
         batch_key = f"{rule['_id']}::{source_dir.as_posix()}"
         with self._lock:
             batch = self._pending_batches.setdefault(
@@ -533,6 +540,20 @@ class MediaOpenListUpload(_PluginBase):
         self._append_task(retry_task)
         threading.Thread(target=self._run_task, args=(retry_task,), daemon=True).start()
         return {"success": True, "task_id": retry_task["id"]}
+
+    def api_rescan_task(self, task_id: str = "") -> Dict[str, Any]:
+        self._sync_tasks_from_store()
+        task = self._find_task(task_id)
+        if not task:
+            return {"success": False, "message": "task not found"}
+        try:
+            rescan_task = self._build_rescan_task(task)
+        except Exception as err:
+            return {"success": False, "message": str(err)}
+        logger.info(f"媒体整理 OpenList 上传：收到目录扫描同步请求 task_id={task_id}")
+        self._append_task(rescan_task)
+        threading.Thread(target=self._run_task, args=(rescan_task,), daemon=True).start()
+        return {"success": True, "task_id": rescan_task["id"]}
 
     def api_clear_tasks(self) -> Dict[str, Any]:
         with self._lock:
@@ -742,6 +763,84 @@ class MediaOpenListUpload(_PluginBase):
         )
         return task
 
+    def _build_rescan_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
+        rule = self._resolve_task_rule(task)
+        if not rule:
+            raise RuntimeError("task rule not found")
+        source_dir_text = str(task.get("source_dir") or "").strip()
+        if not source_dir_text:
+            raise RuntimeError("task source_dir not found")
+        source_dir = self._project_root_dir(Path(source_dir_text), rule)
+        files = self._collect_files(source_dir, rule)
+        if task.get("status") == "failed":
+            original_paths = [
+                Path(file_info.get("local_path"))
+                for file_info in task.get("files", [])
+                if isinstance(file_info, dict) and file_info.get("local_path")
+            ]
+            if original_paths:
+                files = self._merge_upload_items(
+                    files,
+                    self._collect_files(source_dir, rule, matched_paths=original_paths),
+                )
+        rescan_task = {
+            "id": self._new_task_id(),
+            "key": f"{rule['_id']}::{source_dir.as_posix()}",
+            "rule_id": rule["_id"],
+            "rule_name": rule["name"],
+            "display_name": task.get("display_name") or self._derive_display_name(source_dir, rule),
+            "source_dir": source_dir.as_posix(),
+            "target_dir": rule["target_dir"],
+            "status": "pending",
+            "created_at": self._now_text(),
+            "updated_at": self._now_text(),
+            "file_count": len(files),
+            "success_count": 0,
+            "failed_count": 0,
+            "skipped_count": 0,
+            "error": "",
+            "files": [self._file_item_to_dict(item) for item in files],
+            "rule": {key: value for key, value in rule.items() if not key.startswith("_")},
+            "rescan_of": task.get("id"),
+        }
+        return rescan_task
+
+    def _resolve_task_rule(self, task: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        task_rule_id = str(task.get("rule_id") or "")
+        for rule in self._rules:
+            if str(rule.get("_id")) == task_rule_id:
+                return rule
+        stored_rule = task.get("rule") or {}
+        if not isinstance(stored_rule, dict):
+            return None
+        normalized = {
+            "_id": task_rule_id or str(stored_rule.get("id") or stored_rule.get("name") or "rescan"),
+            "enabled": True,
+            "name": str(task.get("rule_name") or stored_rule.get("name") or "上传规则"),
+            "media_dir": self._normalize_local_dir(stored_rule.get("media_dir")),
+            "target_dir": self._normalize_remote_dir(stored_rule.get("target_dir")),
+            "api_interval": self._to_int(stored_rule.get("api_interval"), 0, minimum=0),
+            "overwrite": self._normalize_overwrite(stored_rule.get("overwrite") or "skip"),
+            "exclude_exts": str(stored_rule.get("exclude_exts", "")),
+            "include_scraping": bool(stored_rule.get("include_scraping", True)),
+        }
+        if normalized["media_dir"] and normalized["target_dir"]:
+            return normalized
+        return None
+
+    @staticmethod
+    def _merge_upload_items(*groups: List[UploadFileItem]) -> List[UploadFileItem]:
+        merged: List[UploadFileItem] = []
+        seen = set()
+        for group in groups:
+            for item in group or []:
+                key = item.local_path.as_posix()
+                if key in seen:
+                    continue
+                seen.add(key)
+                merged.append(item)
+        return merged
+
     def _derive_display_name(
         self,
         source_dir: Path,
@@ -761,6 +860,20 @@ class MediaOpenListUpload(_PluginBase):
         if source_dir.name.lower().startswith("season ") and source_dir.parent.name:
             return source_dir.parent.name
         return source_dir.name or source_dir.as_posix()
+
+    def _project_root_dir(self, path: Path, rule: Dict[str, Any]) -> Path:
+        media_dir_text = str(rule.get("media_dir") or "").strip()
+        base_path = path.parent if path.is_file() else path
+        if not media_dir_text:
+            return base_path
+        media_dir = Path(media_dir_text)
+        try:
+            relative = base_path.resolve().relative_to(media_dir.resolve())
+        except Exception:
+            return base_path
+        if not relative.parts:
+            return base_path
+        return media_dir / relative.parts[0]
 
     def _extract_media_title(self, data: Any) -> str:
         candidates: List[str] = []
@@ -844,7 +957,7 @@ class MediaOpenListUpload(_PluginBase):
             if source_dir.is_file():
                 candidates = [source_dir]
             else:
-                candidates = [path for path in source_dir.iterdir() if path.is_file()] if source_dir.exists() else []
+                candidates = [path for path in source_dir.rglob("*") if path.is_file()] if source_dir.exists() else []
         media_dir = Path(rule["media_dir"])
         for local_path in candidates:
             suffix = local_path.suffix.lower()

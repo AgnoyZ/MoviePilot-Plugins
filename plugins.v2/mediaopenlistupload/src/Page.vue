@@ -118,6 +118,32 @@ const retryTask = async (task) => {
   }
 }
 
+const rescanTask = async (task) => {
+  if (!task?.id) return
+  actionLoading.value = `rescan:${task.id}`
+  errorMessage.value = ''
+  try {
+    const result = await callApi('post', apiPath(`/tasks/${task.id}/rescan`))
+    const success = result?.success ?? result?.data?.success
+    if (success === false) {
+      errorMessage.value = result?.message || result?.data?.message || '扫描并同步目录失败'
+      return
+    }
+    const newTaskId = result?.task_id || result?.data?.task_id
+    await loadTasks()
+    if (newTaskId) {
+      const freshTask = tasks.value.find((item) => item.id === newTaskId)
+      if (freshTask) {
+        await selectTask(freshTask)
+      }
+    }
+  } catch (error) {
+    errorMessage.value = error?.message || '扫描并同步目录失败'
+  } finally {
+    actionLoading.value = ''
+  }
+}
+
 const clearTasks = async () => {
   actionLoading.value = 'clear'
   errorMessage.value = ''
@@ -252,9 +278,21 @@ onMounted(loadTasks)
             <div class="text-caption text-medium-emphasis mt-1">{{ selectedTask.rule_name || '-' }}</div>
             <div class="text-caption text-medium-emphasis mt-1 wrap-anywhere">{{ selectedTask.source_dir || selectedTask.id }}</div>
           </div>
-          <v-chip :color="statusInfo(selectedTask.status).color" size="small" variant="tonal">
-            {{ statusInfo(selectedTask.status).text }}
-          </v-chip>
+          <div class="d-flex align-center flex-wrap gap-2">
+            <v-btn
+              :loading="actionLoading === `rescan:${selectedTask.id}`"
+              color="primary"
+              prepend-icon="mdi-folder-sync"
+              size="small"
+              variant="tonal"
+              @click="rescanTask(selectedTask)"
+            >
+              扫描并同步目录文件
+            </v-btn>
+            <v-chip :color="statusInfo(selectedTask.status).color" size="small" variant="tonal">
+              {{ statusInfo(selectedTask.status).text }}
+            </v-chip>
+          </div>
         </div>
 
         <v-table class="file-table border-s border-e border-b rounded-b" density="compact">
