@@ -306,7 +306,7 @@ class MediaOpenListUpload(_PluginBase):
     plugin_desc = "在 MoviePilot 整理媒体文件后，按规则将媒体文件上传到 OpenList。"
     plugin_icon = "cloud.png"
     plugin_color = "#1976D2"
-    plugin_version = "1.28"
+    plugin_version = "1.29"
     plugin_author = "ALBUM"
     author_url = ""
     plugin_config_prefix = "mediaopenlistupload_"
@@ -771,12 +771,20 @@ class MediaOpenListUpload(_PluginBase):
         if not source_dir_text:
             raise RuntimeError("task source_dir not found")
         source_dir = Path(source_dir_text)
-        files = self._collect_files(source_dir, rule)
+        uploaded_success_paths = self._successful_file_paths(task)
+        files = self._filter_upload_items(
+            self._collect_files(source_dir, rule),
+            exclude_paths=uploaded_success_paths,
+        )
         if task.get("status") == "failed":
             original_paths = [
                 Path(file_info.get("local_path"))
                 for file_info in task.get("files", [])
-                if isinstance(file_info, dict) and file_info.get("local_path")
+                if (
+                    isinstance(file_info, dict)
+                    and file_info.get("local_path")
+                    and Path(file_info.get("local_path")).as_posix() not in uploaded_success_paths
+                )
             ]
             if original_paths:
                 files = self._merge_upload_items(
@@ -840,6 +848,32 @@ class MediaOpenListUpload(_PluginBase):
                 seen.add(key)
                 merged.append(item)
         return merged
+
+    @staticmethod
+    def _filter_upload_items(
+        items: List[UploadFileItem],
+        exclude_paths: set,
+    ) -> List[UploadFileItem]:
+        if not exclude_paths:
+            return list(items or [])
+        return [
+            item
+            for item in items or []
+            if item.local_path.as_posix() not in exclude_paths
+        ]
+
+    @staticmethod
+    def _successful_file_paths(task: Dict[str, Any]) -> set:
+        success_paths = set()
+        for file_info in task.get("files", []) or []:
+            if not isinstance(file_info, dict):
+                continue
+            if file_info.get("status") != "success":
+                continue
+            local_path = str(file_info.get("local_path") or "").strip()
+            if local_path:
+                success_paths.add(Path(local_path).as_posix())
+        return success_paths
 
     def _derive_display_name(
         self,
