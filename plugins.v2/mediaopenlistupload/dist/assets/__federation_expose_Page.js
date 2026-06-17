@@ -24,24 +24,30 @@ const _hoisted_14 = { class: "text-caption text-medium-emphasis wrap-anywhere" }
 const _hoisted_15 = { class: "text-right align-top" };
 const _hoisted_16 = {
   key: 0,
+  class: "d-flex justify-center mt-4"
+};
+const _hoisted_17 = {
+  key: 0,
   class: "mt-4"
 };
-const _hoisted_17 = { class: "d-flex align-center justify-space-between px-4 pt-4 pb-2 flex-wrap gap-2 border rounded-t bg-surface" };
-const _hoisted_18 = { class: "detail-header" };
-const _hoisted_19 = { class: "text-subtitle-1 font-weight-medium" };
-const _hoisted_20 = { class: "text-caption text-medium-emphasis mt-1" };
-const _hoisted_21 = { class: "text-caption text-medium-emphasis mt-1 wrap-anywhere" };
-const _hoisted_22 = { class: "d-flex align-center flex-wrap gap-2" };
-const _hoisted_23 = { class: "path-cell align-top" };
-const _hoisted_24 = ["title"];
-const _hoisted_25 = { class: "path-cell align-top" };
-const _hoisted_26 = ["title"];
-const _hoisted_27 = { class: "align-top" };
-const _hoisted_28 = { class: "message-cell align-top" };
-const _hoisted_29 = ["title"];
+const _hoisted_18 = { class: "d-flex align-center justify-space-between px-4 pt-4 pb-2 flex-wrap gap-2 border rounded-t bg-surface" };
+const _hoisted_19 = { class: "detail-header" };
+const _hoisted_20 = { class: "text-subtitle-1 font-weight-medium" };
+const _hoisted_21 = { class: "text-caption text-medium-emphasis mt-1" };
+const _hoisted_22 = { class: "text-caption text-medium-emphasis mt-1 wrap-anywhere" };
+const _hoisted_23 = { class: "d-flex align-center flex-wrap gap-2" };
+const _hoisted_24 = { class: "path-cell align-top" };
+const _hoisted_25 = ["title"];
+const _hoisted_26 = { class: "path-cell align-top" };
+const _hoisted_27 = ["title"];
+const _hoisted_28 = { class: "align-top" };
+const _hoisted_29 = { class: "message-cell align-top" };
+const _hoisted_30 = ["title"];
 
 const {computed,onMounted,ref} = await importShared('vue');
 
+
+const TASKS_PAGE_SIZE = 10;
 
 
 const _sfc_main = {
@@ -64,9 +70,14 @@ const actionLoading = ref('');
 const errorMessage = ref('');
 const tasks = ref([]);
 const selectedTask = ref(null);
+const currentPage = ref(1);
+const totalTasks = ref(0);
+const failedTasks = ref(0);
+const pageSize = ref(TASKS_PAGE_SIZE);
 
-const taskTotal = computed(() => tasks.value.length);
-const failedTotal = computed(() => tasks.value.filter((task) => task.status === 'failed').length);
+const taskTotal = computed(() => totalTasks.value || tasks.value.length);
+const failedTotal = computed(() => failedTasks.value || tasks.value.filter((task) => task.status === 'failed').length);
+const pageCount = computed(() => Math.max(1, Math.ceil(taskTotal.value / pageSize.value)));
 const effectivePluginId = computed(() => props.pluginId || 'MediaOpenListUpload');
 
 const statusMap = {
@@ -102,13 +113,23 @@ const callApi = async (method, path, body) => {
 
 const apiPath = (path) => `plugin/${effectivePluginId.value}${path}`;
 
-const loadTasks = async () => {
+const normalizePage = (page) => {
+  const parsed = Number(page);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : currentPage.value
+};
+
+const loadTasks = async (page = currentPage.value) => {
+  const targetPage = normalizePage(page);
   loading.value = true;
   errorMessage.value = '';
   try {
-    const result = await callApi('get', apiPath('/tasks?page_size=50'));
-    const items = result?.items || result?.data?.items || [];
+    const result = await callApi('get', apiPath(`/tasks?page=${targetPage}&page_size=${pageSize.value}`));
+    const payload = result?.data || result || {};
+    const items = payload?.items || [];
     tasks.value = Array.isArray(items) ? items : [];
+    totalTasks.value = Number(payload?.total) || tasks.value.length;
+    failedTasks.value = Number(payload?.failed_total) || tasks.value.filter((task) => task.status === 'failed').length;
+    currentPage.value = Number(payload?.page) || targetPage;
 
     if (tasks.value.length === 0) {
       let fallbackTasks = [];
@@ -122,12 +143,25 @@ const loadTasks = async () => {
 
       if (fallbackTasks.length > 0) {
         tasks.value = fallbackTasks;
+        totalTasks.value = fallbackTasks.length;
+        failedTasks.value = fallbackTasks.filter((task) => task.status === 'failed').length;
+        currentPage.value = 1;
       }
+    }
+
+    if (taskTotal.value > 0 && currentPage.value > pageCount.value) {
+      await loadTasks(pageCount.value);
+      return
     }
 
     if (selectedTask.value) {
       const freshTask = tasks.value.find((task) => task.id === selectedTask.value.id);
-      selectedTask.value = freshTask || null;
+      if (freshTask) {
+        selectedTask.value = freshTask;
+      } else if (selectedTask.value.id) {
+        const detailResult = await callApi('get', apiPath(`/tasks/${selectedTask.value.id}`));
+        selectedTask.value = detailResult?.task || detailResult?.data?.task || selectedTask.value;
+      }
     }
     emit('action');
   } catch (error) {
@@ -204,12 +238,18 @@ const clearTasks = async () => {
       return
     }
     selectedTask.value = null;
+    currentPage.value = 1;
     await loadTasks();
   } catch (error) {
     errorMessage.value = error?.message || '清理历史失败';
   } finally {
     actionLoading.value = '';
   }
+};
+
+const changePage = async (page) => {
+  if (page === currentPage.value || loading.value) return
+  await loadTasks(page);
 };
 
 onMounted(loadTasks);
@@ -220,6 +260,7 @@ return (_ctx, _cache) => {
   const _component_v_alert = _resolveComponent("v-alert");
   const _component_v_chip = _resolveComponent("v-chip");
   const _component_v_table = _resolveComponent("v-table");
+  const _component_v_pagination = _resolveComponent("v-pagination");
   const _component_v_expand_transition = _resolveComponent("v-expand-transition");
   const _component_v_sheet = _resolveComponent("v-sheet");
 
@@ -232,7 +273,7 @@ return (_ctx, _cache) => {
     default: _withCtx(() => [
       _createElementVNode("div", _hoisted_1, [
         _createElementVNode("div", null, [
-          _cache[3] || (_cache[3] = _createElementVNode("div", { class: "text-subtitle-1 font-weight-medium" }, "上传结果", -1)),
+          _cache[4] || (_cache[4] = _createElementVNode("div", { class: "text-subtitle-1 font-weight-medium" }, "上传结果", -1)),
           _createElementVNode("div", _hoisted_2, " 最近 " + _toDisplayString(taskTotal.value) + " 个任务，" + _toDisplayString(failedTotal.value) + " 个失败 ", 1)
         ]),
         _createElementVNode("div", _hoisted_3, [
@@ -243,7 +284,7 @@ return (_ctx, _cache) => {
             variant: "tonal",
             onClick: clearTasks
           }, {
-            default: _withCtx(() => [...(_cache[4] || (_cache[4] = [
+            default: _withCtx(() => [...(_cache[5] || (_cache[5] = [
               _createTextVNode(" 清空 ", -1)
             ]))]),
             _: 1
@@ -253,9 +294,9 @@ return (_ctx, _cache) => {
             color: "primary",
             "prepend-icon": "mdi-refresh",
             variant: "tonal",
-            onClick: loadTasks
+            onClick: _cache[0] || (_cache[0] = $event => (loadTasks()))
           }, {
-            default: _withCtx(() => [...(_cache[5] || (_cache[5] = [
+            default: _withCtx(() => [...(_cache[6] || (_cache[6] = [
               _createTextVNode(" 刷新 ", -1)
             ]))]),
             _: 1
@@ -263,9 +304,9 @@ return (_ctx, _cache) => {
           _createVNode(_component_v_btn, {
             "prepend-icon": "mdi-cog",
             variant: "tonal",
-            onClick: _cache[0] || (_cache[0] = $event => (emit('switch')))
+            onClick: _cache[1] || (_cache[1] = $event => (emit('switch')))
           }, {
-            default: _withCtx(() => [...(_cache[6] || (_cache[6] = [
+            default: _withCtx(() => [...(_cache[7] || (_cache[7] = [
               _createTextVNode("配置", -1)
             ]))]),
             _: 1
@@ -273,7 +314,7 @@ return (_ctx, _cache) => {
         ])
       ]),
       _createVNode(_component_VDialogCloseBtn, {
-        onClick: _cache[1] || (_cache[1] = $event => (emit('close')))
+        onClick: _cache[2] || (_cache[2] = $event => (emit('close')))
       }),
       (errorMessage.value)
         ? (_openBlock(), _createBlock(_component_v_alert, {
@@ -297,7 +338,7 @@ return (_ctx, _cache) => {
             type: "info",
             variant: "tonal"
           }, {
-            default: _withCtx(() => [...(_cache[7] || (_cache[7] = [
+            default: _withCtx(() => [...(_cache[8] || (_cache[8] = [
               _createTextVNode(" 暂无上传任务。命中启用规则后，整理完成事件会生成上传记录。 ", -1)
             ]))]),
             _: 1
@@ -309,7 +350,7 @@ return (_ctx, _cache) => {
               hover: ""
             }, {
               default: _withCtx(() => [
-                _cache[9] || (_cache[9] = _createElementVNode("thead", null, [
+                _cache[10] || (_cache[10] = _createElementVNode("thead", null, [
                   _createElementVNode("tr", null, [
                     _createElementVNode("th", { class: "text-no-wrap" }, "时间"),
                     _createElementVNode("th", null, "任务"),
@@ -357,7 +398,7 @@ return (_ctx, _cache) => {
                           variant: "text",
                           onClick: _withModifiers($event => (retryTask(task)), ["stop"])
                         }, {
-                          default: _withCtx(() => [...(_cache[8] || (_cache[8] = [
+                          default: _withCtx(() => [...(_cache[9] || (_cache[9] = [
                             _createTextVNode(" 重试 ", -1)
                           ]))]),
                           _: 1
@@ -368,28 +409,40 @@ return (_ctx, _cache) => {
                 ])
               ]),
               _: 1
-            })
+            }),
+            (pageCount.value > 1)
+              ? (_openBlock(), _createElementBlock("div", _hoisted_16, [
+                  _createVNode(_component_v_pagination, {
+                    length: pageCount.value,
+                    "model-value": currentPage.value,
+                    density: "comfortable",
+                    rounded: "circle",
+                    "total-visible": "7",
+                    "onUpdate:modelValue": changePage
+                  }, null, 8, ["length", "model-value"])
+                ]))
+              : _createCommentVNode("", true)
           ])),
       _createVNode(_component_v_expand_transition, null, {
         default: _withCtx(() => [
           (selectedTask.value)
-            ? (_openBlock(), _createElementBlock("div", _hoisted_16, [
-                _createElementVNode("div", _hoisted_17, [
-                  _createElementVNode("div", _hoisted_18, [
-                    _createElementVNode("div", _hoisted_19, _toDisplayString(taskDisplayName(selectedTask.value)), 1),
-                    _createElementVNode("div", _hoisted_20, _toDisplayString(selectedTask.value.rule_name || '-'), 1),
-                    _createElementVNode("div", _hoisted_21, _toDisplayString(selectedTask.value.source_dir || selectedTask.value.id), 1)
+            ? (_openBlock(), _createElementBlock("div", _hoisted_17, [
+                _createElementVNode("div", _hoisted_18, [
+                  _createElementVNode("div", _hoisted_19, [
+                    _createElementVNode("div", _hoisted_20, _toDisplayString(taskDisplayName(selectedTask.value)), 1),
+                    _createElementVNode("div", _hoisted_21, _toDisplayString(selectedTask.value.rule_name || '-'), 1),
+                    _createElementVNode("div", _hoisted_22, _toDisplayString(selectedTask.value.source_dir || selectedTask.value.id), 1)
                   ]),
-                  _createElementVNode("div", _hoisted_22, [
+                  _createElementVNode("div", _hoisted_23, [
                     _createVNode(_component_v_btn, {
                       loading: actionLoading.value === `rescan:${selectedTask.value.id}`,
                       color: "primary",
                       "prepend-icon": "mdi-folder-sync",
                       size: "small",
                       variant: "tonal",
-                      onClick: _cache[2] || (_cache[2] = $event => (rescanTask(selectedTask.value)))
+                      onClick: _cache[3] || (_cache[3] = $event => (rescanTask(selectedTask.value)))
                     }, {
-                      default: _withCtx(() => [...(_cache[10] || (_cache[10] = [
+                      default: _withCtx(() => [...(_cache[11] || (_cache[11] = [
                         _createTextVNode(" 扫描并同步目录文件 ", -1)
                       ]))]),
                       _: 1
@@ -411,7 +464,7 @@ return (_ctx, _cache) => {
                   density: "compact"
                 }, {
                   default: _withCtx(() => [
-                    _cache[11] || (_cache[11] = _createElementVNode("thead", null, [
+                    _cache[12] || (_cache[12] = _createElementVNode("thead", null, [
                       _createElementVNode("tr", null, [
                         _createElementVNode("th", null, "本地路径"),
                         _createElementVNode("th", null, "OpenList 路径"),
@@ -424,19 +477,19 @@ return (_ctx, _cache) => {
                         return (_openBlock(), _createElementBlock("tr", {
                           key: `${file.local_path}-${file.remote_path}`
                         }, [
-                          _createElementVNode("td", _hoisted_23, [
+                          _createElementVNode("td", _hoisted_24, [
                             _createElementVNode("div", {
                               class: "path-text",
                               title: file.local_path
-                            }, _toDisplayString(file.local_path), 9, _hoisted_24)
+                            }, _toDisplayString(file.local_path), 9, _hoisted_25)
                           ]),
-                          _createElementVNode("td", _hoisted_25, [
+                          _createElementVNode("td", _hoisted_26, [
                             _createElementVNode("div", {
                               class: "path-text",
                               title: file.remote_path
-                            }, _toDisplayString(file.remote_path), 9, _hoisted_26)
+                            }, _toDisplayString(file.remote_path), 9, _hoisted_27)
                           ]),
-                          _createElementVNode("td", _hoisted_27, [
+                          _createElementVNode("td", _hoisted_28, [
                             _createVNode(_component_v_chip, {
                               color: statusInfo(file.status).color,
                               size: "x-small",
@@ -448,11 +501,11 @@ return (_ctx, _cache) => {
                               _: 2
                             }, 1032, ["color"])
                           ]),
-                          _createElementVNode("td", _hoisted_28, [
+                          _createElementVNode("td", _hoisted_29, [
                             _createElementVNode("div", {
                               class: "message-text",
                               title: file.message || '-'
-                            }, _toDisplayString(file.message || '-'), 9, _hoisted_29)
+                            }, _toDisplayString(file.message || '-'), 9, _hoisted_30)
                           ])
                         ]))
                       }), 128))
@@ -472,6 +525,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Page = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-066131c8"]]);
+const Page = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-eb2b6508"]]);
 
 export { Page as default };

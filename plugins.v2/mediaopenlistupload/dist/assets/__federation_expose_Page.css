@@ -7,73 +7,73 @@
   width: 100%;
 }
 
-.media-openlist-upload-page[data-v-066131c8] {
+.media-openlist-upload-page[data-v-eb2b6508] {
   width: 100%;
   overflow-x: hidden;
 }
-.page-header[data-v-066131c8] {
+.page-header[data-v-eb2b6508] {
   padding-right: 48px;
 }
-.gap-2[data-v-066131c8] {
+.gap-2[data-v-eb2b6508] {
   gap: 8px;
 }
-.gap-3[data-v-066131c8] {
+.gap-3[data-v-eb2b6508] {
   gap: 12px;
 }
-.task-table[data-v-066131c8] .v-table__wrapper,
-.file-table[data-v-066131c8] .v-table__wrapper {
+.task-table[data-v-eb2b6508] .v-table__wrapper,
+.file-table[data-v-eb2b6508] .v-table__wrapper {
   overflow-x: auto;
 }
-.task-table tbody tr[data-v-066131c8] {
+.task-table tbody tr[data-v-eb2b6508] {
   cursor: pointer;
 }
-.task-table td[data-v-066131c8],
-.file-table td[data-v-066131c8] {
+.task-table td[data-v-eb2b6508],
+.file-table td[data-v-eb2b6508] {
   vertical-align: top;
 }
-.bg-primary-lighten-1[data-v-066131c8] {
+.bg-primary-lighten-1[data-v-eb2b6508] {
   background: rgba(var(--v-theme-primary), 0.08) !important;
 }
-.task-path[data-v-066131c8] {
+.task-path[data-v-eb2b6508] {
   max-width: 320px;
 }
-.error-cell[data-v-066131c8] {
+.error-cell[data-v-eb2b6508] {
   min-width: 180px;
   max-width: 240px;
 }
-.message-cell[data-v-066131c8] {
+.message-cell[data-v-eb2b6508] {
   min-width: 180px;
   max-width: 260px;
 }
-.path-cell[data-v-066131c8] {
+.path-cell[data-v-eb2b6508] {
   min-width: 260px;
   max-width: 420px;
 }
-.path-text[data-v-066131c8],
-.message-text[data-v-066131c8],
-.wrap-anywhere[data-v-066131c8] {
+.path-text[data-v-eb2b6508],
+.message-text[data-v-eb2b6508],
+.wrap-anywhere[data-v-eb2b6508] {
   white-space: normal;
   overflow-wrap: anywhere;
   word-break: break-word;
   line-height: 1.45;
 }
-.detail-header[data-v-066131c8] {
+.detail-header[data-v-eb2b6508] {
   min-width: 0;
   flex: 1 1 420px;
 }
 @media (max-width: 599px) {
-.page-header[data-v-066131c8] {
+.page-header[data-v-eb2b6508] {
     padding-top: 28px;
 }
-.task-path[data-v-066131c8],
-  .error-cell[data-v-066131c8],
-  .message-cell[data-v-066131c8],
-  .path-cell[data-v-066131c8] {
+.task-path[data-v-eb2b6508],
+  .error-cell[data-v-eb2b6508],
+  .message-cell[data-v-eb2b6508],
+  .path-cell[data-v-eb2b6508] {
     max-width: none;
 }
 }
 @media (min-width: 600px) {
-.w-sm-auto[data-v-066131c8] {
+.w-sm-auto[data-v-eb2b6508] {
     width: auto !important;
 }
 }

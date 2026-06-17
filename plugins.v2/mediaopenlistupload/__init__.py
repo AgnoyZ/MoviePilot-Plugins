@@ -306,7 +306,7 @@ class MediaOpenListUpload(_PluginBase):
     plugin_desc = "在 MoviePilot 整理媒体文件后，按规则将媒体文件上传到 OpenList。"
     plugin_icon = "cloud.png"
     plugin_color = "#1976D2"
-    plugin_version = "1.29"
+    plugin_version = "1.34"
     plugin_author = "ALBUM"
     author_url = ""
     plugin_config_prefix = "mediaopenlistupload_"
@@ -421,7 +421,7 @@ class MediaOpenListUpload(_PluginBase):
         return "vue", "dist/assets"
 
     def get_page(self) -> List[dict]:
-        rows = self._task_rows(limit=20)
+        rows = self._task_rows(limit=10)
         return [
             {
                 "component": "VAlert",
@@ -503,16 +503,23 @@ class MediaOpenListUpload(_PluginBase):
             batch["updated_at"] = time.time()
             self._reset_timer_locked()
 
-    def api_tasks(self, page: int = 1, page_size: int = 20) -> Dict[str, Any]:
+    def api_tasks(self, page: int = 1, page_size: int = 10) -> Dict[str, Any]:
         page = self._to_int(page, 1, minimum=1)
-        page_size = self._to_int(page_size, 20, minimum=1)
+        page_size = self._to_int(page_size, 10, minimum=1)
         self._sync_tasks_from_store()
         with self._lock:
             total = len(self._tasks)
+            failed_total = sum(1 for task in self._tasks if task.get("status") == "failed")
             start = (page - 1) * page_size
             end = start + page_size
             items = list(reversed(self._tasks))[start:end]
-        return {"total": total, "page": page, "page_size": page_size, "items": items}
+        return {
+            "total": total,
+            "failed_total": failed_total,
+            "page": page,
+            "page_size": page_size,
+            "items": items,
+        }
 
     def api_task_detail(self, task_id: str = "") -> Dict[str, Any]:
         self._sync_tasks_from_store()

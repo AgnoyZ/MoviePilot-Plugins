@@ -10,14 +10,21 @@ const props = defineProps({
 
 const emit = defineEmits(['action', 'switch', 'close'])
 
+const TASKS_PAGE_SIZE = 10
+
 const loading = ref(false)
 const actionLoading = ref('')
 const errorMessage = ref('')
 const tasks = ref([])
 const selectedTask = ref(null)
+const currentPage = ref(1)
+const totalTasks = ref(0)
+const failedTasks = ref(0)
+const pageSize = ref(TASKS_PAGE_SIZE)
 
-const taskTotal = computed(() => tasks.value.length)
-const failedTotal = computed(() => tasks.value.filter((task) => task.status === 'failed').length)
+const taskTotal = computed(() => totalTasks.value || tasks.value.length)
+const failedTotal = computed(() => failedTasks.value || tasks.value.filter((task) => task.status === 'failed').length)
+const pageCount = computed(() => Math.max(1, Math.ceil(taskTotal.value / pageSize.value)))
 const effectivePluginId = computed(() => props.pluginId || 'MediaOpenListUpload')
 
 const statusMap = {
@@ -53,13 +60,23 @@ const callApi = async (method, path, body) => {
 
 const apiPath = (path) => `plugin/${effectivePluginId.value}${path}`
 
-const loadTasks = async () => {
+const normalizePage = (page) => {
+  const parsed = Number(page)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : currentPage.value
+}
+
+const loadTasks = async (page = currentPage.value) => {
+  const targetPage = normalizePage(page)
   loading.value = true
   errorMessage.value = ''
   try {
-    const result = await callApi('get', apiPath('/tasks?page_size=50'))
-    const items = result?.items || result?.data?.items || []
+    const result = await callApi('get', apiPath(`/tasks?page=${targetPage}&page_size=${pageSize.value}`))
+    const payload = result?.data || result || {}
+    const items = payload?.items || []
     tasks.value = Array.isArray(items) ? items : []
+    totalTasks.value = Number(payload?.total) || tasks.value.length
+    failedTasks.value = Number(payload?.failed_total) || tasks.value.filter((task) => task.status === 'failed').length
+    currentPage.value = Number(payload?.page) || targetPage
 
     if (tasks.value.length === 0) {
       let fallbackTasks = []
@@ -73,12 +90,25 @@ const loadTasks = async () => {
 
       if (fallbackTasks.length > 0) {
         tasks.value = fallbackTasks
+        totalTasks.value = fallbackTasks.length
+        failedTasks.value = fallbackTasks.filter((task) => task.status === 'failed').length
+        currentPage.value = 1
       }
+    }
+
+    if (taskTotal.value > 0 && currentPage.value > pageCount.value) {
+      await loadTasks(pageCount.value)
+      return
     }
 
     if (selectedTask.value) {
       const freshTask = tasks.value.find((task) => task.id === selectedTask.value.id)
-      selectedTask.value = freshTask || null
+      if (freshTask) {
+        selectedTask.value = freshTask
+      } else if (selectedTask.value.id) {
+        const detailResult = await callApi('get', apiPath(`/tasks/${selectedTask.value.id}`))
+        selectedTask.value = detailResult?.task || detailResult?.data?.task || selectedTask.value
+      }
     }
     emit('action')
   } catch (error) {
@@ -155,12 +185,18 @@ const clearTasks = async () => {
       return
     }
     selectedTask.value = null
+    currentPage.value = 1
     await loadTasks()
   } catch (error) {
     errorMessage.value = error?.message || '清理历史失败'
   } finally {
     actionLoading.value = ''
   }
+}
+
+const changePage = async (page) => {
+  if (page === currentPage.value || loading.value) return
+  await loadTasks(page)
 }
 
 onMounted(loadTasks)
@@ -190,7 +226,7 @@ onMounted(loadTasks)
           color="primary"
           prepend-icon="mdi-refresh"
           variant="tonal"
-          @click="loadTasks"
+          @click="loadTasks()"
         >
           刷新
         </v-btn>
@@ -268,6 +304,17 @@ onMounted(loadTasks)
           </tr>
         </tbody>
       </v-table>
+
+      <div v-if="pageCount > 1" class="d-flex justify-center mt-4">
+        <v-pagination
+          :length="pageCount"
+          :model-value="currentPage"
+          density="comfortable"
+          rounded="circle"
+          total-visible="7"
+          @update:model-value="changePage"
+        />
+      </div>
     </div>
 
     <v-expand-transition>
