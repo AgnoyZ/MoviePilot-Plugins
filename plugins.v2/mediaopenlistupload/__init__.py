@@ -183,6 +183,22 @@ class DirectOpenListClient:
         try:
             self._request_json("POST", "/api/fs/mkdir", {"path": remote_dir})
         except Exception as err:
+            current_dir = ""
+            for part in PurePosixPath(remote_dir).parts:
+                if part == "/":
+                    continue
+                current_dir = f"{current_dir}/{part}"
+                try:
+                    self._request_json("POST", "/api/fs/mkdir", {"path": current_dir})
+                except Exception as step_err:
+                    if self.exists(current_dir):
+                        continue
+                    raise RuntimeError(
+                        f"OpenList directory creation failed: target={remote_dir}; "
+                        f"failed_at={current_dir}; error={step_err}; "
+                        f"initial_error={err}"
+                    ) from step_err
+
             if not self.exists(remote_dir):
                 raise RuntimeError(f"获取或创建 OpenList 目录失败: {remote_dir}") from err
 
@@ -306,7 +322,7 @@ class MediaOpenListUpload(_PluginBase):
     plugin_desc = "在 MoviePilot 整理媒体文件后，按规则将媒体文件上传到 OpenList。"
     plugin_icon = "cloud.png"
     plugin_color = "#1976D2"
-    plugin_version = "1.34"
+    plugin_version = "1.35"
     plugin_author = "ALBUM"
     author_url = ""
     plugin_config_prefix = "mediaopenlistupload_"
