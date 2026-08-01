@@ -13,7 +13,7 @@ from app.db.plugindata_oper import PluginDataOper
 from app.core.event import Event, eventmanager
 from app.log import logger
 from app.plugins import _PluginBase
-from app.schemas.types import EventType
+from app.schemas.types import EventType, NotificationType
 
 
 try:
@@ -322,7 +322,7 @@ class MediaOpenListUpload(_PluginBase):
     plugin_desc = "在 MoviePilot 整理媒体文件后，按规则将媒体文件上传到 OpenList。"
     plugin_icon = "cloud.png"
     plugin_color = "#1976D2"
-    plugin_version = "1.35"
+    plugin_version = "1.36"
     plugin_author = "ALBUM"
     author_url = ""
     plugin_config_prefix = "mediaopenlistupload_"
@@ -337,6 +337,7 @@ class MediaOpenListUpload(_PluginBase):
     _default_overwrite = "skip"
     _default_exclude_exts = ""
     _default_include_scraping = True
+    _source_tag = ""
     _rules: List[Dict[str, Any]] = []
     _tasks: List[Dict[str, Any]] = []
     _pending_batches: Dict[str, Dict[str, Any]] = {}
@@ -361,6 +362,7 @@ class MediaOpenListUpload(_PluginBase):
         self._merge_delay = self._to_int(config.get("merge_delay"), 60, minimum=0)
         self._max_retries = self._to_int(config.get("max_retries"), 3, minimum=0)
         self._retry_interval = self._to_int(config.get("retry_interval"), 30, minimum=0)
+        self._source_tag = self._normalize_source_tag(config.get("source_tag"))
         self._rules = self._load_rules(config)
         self._tasks = self._load_tasks()
 
@@ -622,6 +624,7 @@ class MediaOpenListUpload(_PluginBase):
             "max_retries": 3,
             "retry_interval": 30,
             "rules": [],
+            "source_tag": "OpenList",
             "openlist_items": openlist_items,
         }
         return defaults
@@ -1014,7 +1017,8 @@ class MediaOpenListUpload(_PluginBase):
             except Exception:
                 relative_dir = local_path.parent.name
             remote_dir = self._join_remote(rule["target_dir"], relative_dir)
-            remote_path = self._join_remote(remote_dir, local_path.name)
+            remote_name = self._build_remote_filename(local_path.name)
+            remote_path = self._join_remote(remote_dir, remote_name)
             files.append(
                 UploadFileItem(
                     local_path=local_path,
@@ -1098,6 +1102,8 @@ class MediaOpenListUpload(_PluginBase):
                 f"媒体整理 OpenList 上传：任务完成 task_id={task['id']} status={final_status} "
                 f"success={success_count} skipped={skipped_count} failed={failed_count}"
             )
+            if final_status == "success" and success_count > 0:
+                self._send_success_notification(task, success_count, skipped_count)
         except Exception as err:
             logger.error(f"媒体整理 OpenList 上传：任务执行失败 task_id={task['id']} error={err}")
             self._update_task(task["id"], status="failed", error=str(err))
@@ -1337,6 +1343,45 @@ class MediaOpenListUpload(_PluginBase):
     def _normalize_overwrite(self, value: Any) -> str:
         text = str(value or "skip").strip().lower()
         return text if text in ("skip", "overwrite", "rename") else "skip"
+
+    def _build_remote_filename(self, filename: str) -> str:
+        source_tag = self._source_tag
+        if not source_tag:
+            return filename
+        stem, suffix = posixpath.splitext(filename)
+        if not suffix or suffix.lower() not in MEDIA_EXTS:
+            return filename
+        normalized_tag = f"[{source_tag}]"
+        if stem.rstrip().endswith(normalized_tag):
+            return filename
+        return f"{stem} {normalized_tag}{suffix}"
+
+    def _normalize_source_tag(self, value: Any) -> str:
+        text = str(value or "").strip()
+        if not text:
+            return ""
+        if text.startswith("[") and text.endswith("]"):
+            text = text[1:-1].strip()
+        return text
+
+    def _send_success_notification(
+        self,
+        task: Dict[str, Any],
+        success_count: int,
+        skipped_count: int,
+    ):
+        try:
+            title = "媒体整理 OpenList 上传成功"
+            text = (
+                f"{task.get('display_name') or task.get('rule_name') or '媒体文件'} 上传完成\n"
+                f"规则：{task.get('rule_name') or '-'}\n"
+                f"成功：{success_count} 个"
+            )
+            if skipped_count:
+                text = f"{text}，跳过：{skipped_count} 个"
+            self.post_message(mtype=NotificationType.Plugin, title=title, text=text)
+        except Exception as err:
+            logger.warning(f"媒体整理 OpenList 上传：发送上传成功通知失败 task_id={task.get('id')} error={err}")
 
     def _parse_exts(self, value: Any) -> set:
         result = set()
