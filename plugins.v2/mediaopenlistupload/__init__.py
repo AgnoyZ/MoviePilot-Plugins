@@ -510,6 +510,7 @@ class MediaOpenListUpload(_PluginBase):
                     "rule": rule,
                     "source_dir": source_dir.as_posix(),
                     "display_name": self._derive_display_name(source_dir, rule, event_data),
+                    "image": self._extract_media_image(event_data),
                     "paths": set(),
                     "first_at": time.time(),
                     "updated_at": time.time(),
@@ -517,6 +518,8 @@ class MediaOpenListUpload(_PluginBase):
             )
             if not batch.get("display_name"):
                 batch["display_name"] = self._derive_display_name(source_dir, rule, event_data)
+            if not batch.get("image"):
+                batch["image"] = self._extract_media_image(event_data)
             batch["paths"].add(media_path.as_posix())
             batch["updated_at"] = time.time()
             self._reset_timer_locked()
@@ -769,6 +772,7 @@ class MediaOpenListUpload(_PluginBase):
             "rule_id": rule["_id"],
             "rule_name": rule["name"],
             "display_name": batch.get("display_name") or self._derive_display_name(source_dir, rule),
+            "image": batch.get("image") or "",
             "source_dir": source_dir.as_posix(),
             "target_dir": rule["target_dir"],
             "status": "pending",
@@ -823,6 +827,7 @@ class MediaOpenListUpload(_PluginBase):
             "rule_id": rule["_id"],
             "rule_name": rule["name"],
             "display_name": task.get("display_name") or self._derive_display_name(source_dir, rule),
+            "image": task.get("image") or "",
             "source_dir": source_dir.as_posix(),
             "target_dir": rule["target_dir"],
             "status": "pending",
@@ -948,6 +953,41 @@ class MediaOpenListUpload(_PluginBase):
         for title in candidates:
             if not self._looks_like_local_path(title):
                 return title
+        return ""
+
+    def _extract_media_image(self, data: Any) -> str:
+        candidates: List[str] = []
+
+        def add_candidate(value: Any):
+            text = str(value or "").strip()
+            if text and text not in candidates:
+                candidates.append(text)
+
+        def walk(value: Any, depth: int = 0):
+            if value is None or depth > 3:
+                return
+            if isinstance(value, dict):
+                for key in ("tmdb_image", "image", "poster", "poster_path", "backdrop", "backdrop_path", "cover"):
+                    if key in value:
+                        walk(value.get(key), depth + 1)
+                for key in ("mediainfo", "media_info", "meta"):
+                    if key in value:
+                        walk(value.get(key), depth + 1)
+                return
+            if isinstance(value, str):
+                add_candidate(value)
+                return
+            for attr in ("tmdb_image", "image", "poster", "poster_path", "backdrop", "backdrop_path", "cover"):
+                if hasattr(value, attr):
+                    walk(getattr(value, attr, None), depth + 1)
+            for attr in ("mediainfo", "media_info", "meta"):
+                if hasattr(value, attr):
+                    walk(getattr(value, attr, None), depth + 1)
+
+        walk(data)
+        for image in candidates:
+            if not self._looks_like_local_path(image):
+                return image
         return ""
 
     def _collect_files(
@@ -1102,11 +1142,11 @@ class MediaOpenListUpload(_PluginBase):
                 f"媒体整理 OpenList 上传：任务完成 task_id={task['id']} status={final_status} "
                 f"success={success_count} skipped={skipped_count} failed={failed_count}"
             )
-            if final_status == "success" and success_count > 0:
-                self._send_success_notification(task, success_count, skipped_count)
+            self._send_upload_notification(task, final_status, last_error)
         except Exception as err:
             logger.error(f"媒体整理 OpenList 上传：任务执行失败 task_id={task['id']} error={err}")
             self._update_task(task["id"], status="failed", error=str(err))
+            self._send_upload_notification(task, "failed", str(err))
         finally:
             with self._lock:
                 self._running_keys.discard(task["key"])
@@ -1364,24 +1404,49 @@ class MediaOpenListUpload(_PluginBase):
             text = text[1:-1].strip()
         return text
 
-    def _send_success_notification(
-        self,
-        task: Dict[str, Any],
-        success_count: int,
-        skipped_count: int,
-    ):
+    def _send_upload_notification(self, task: Dict[str, Any], status: str, error: str = ""):
         try:
-            title = "媒体整理 OpenList 上传成功"
-            text = (
-                f"{task.get('display_name') or task.get('rule_name') or '媒体文件'} 上传完成\n"
-                f"规则：{task.get('rule_name') or '-'}\n"
-                f"成功：{success_count} 个"
-            )
-            if skipped_count:
-                text = f"{text}，跳过：{skipped_count} 个"
-            self.post_message(mtype=NotificationType.Plugin, title=title, text=text)
+            if status == "success":
+                file_path = self._notification_file_path(task, "success")
+                self.post_message(
+                    mtype=NotificationType.SiteMessage,
+                    title=f"{self._notification_media_name(task)} 入库成功！",
+                    text=(
+                        f"文件：{file_path}\n"
+                        f"状态：上传 alist 成功"
+                    ),
+                    image=task.get("image") or None,
+                )
+            elif status == "failed":
+                file_path = self._notification_file_path(task, "failed")
+                self.post_message(
+                    mtype=NotificationType.Manual,
+                    title=f"{self._notification_media_name(task)} 入库失败！",
+                    text=(
+                        f"原因：{error or task.get('error') or '上传失败'}\n"
+                        f"文件：{file_path}\n"
+                        f"状态：上传 alist 失败"
+                    ),
+                    image=task.get("image") or None,
+                )
         except Exception as err:
-            logger.warning(f"媒体整理 OpenList 上传：发送上传成功通知失败 task_id={task.get('id')} error={err}")
+            logger.warning(f"媒体整理 OpenList 上传：发送上传通知失败 task_id={task.get('id')} error={err}")
+
+    def _notification_media_name(self, task: Dict[str, Any]) -> str:
+        return str(task.get("display_name") or task.get("rule_name") or "媒体文件")
+
+    def _notification_file_path(self, task: Dict[str, Any], status: str) -> str:
+        fallback = str(task.get("source_dir") or "")
+        for file_info in task.get("files", []) or []:
+            if not isinstance(file_info, dict):
+                continue
+            if file_info.get("status") != status:
+                continue
+            return str(file_info.get("local_path") or file_info.get("remote_path") or fallback)
+        for file_info in task.get("files", []) or []:
+            if isinstance(file_info, dict):
+                return str(file_info.get("local_path") or file_info.get("remote_path") or fallback)
+        return fallback
 
     def _parse_exts(self, value: Any) -> set:
         result = set()
