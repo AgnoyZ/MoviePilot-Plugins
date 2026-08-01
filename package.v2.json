@@ -4,7 +4,7 @@
         "description": "在 MoviePilot 整理媒体文件后，按规则将整理出的媒体库文件上传到 OpenList 指定目录。",
         "version": "1.36",
         "icon": "cloud.png",
-        "author": "ALBUM",
+        "author": "AgonyZ",
         "level": 1,
         "history": {
             "v1.36": "新增上传视频文件来源标记配置，上传时可在视频文件名追加来源信息，并在任务上传成功后发送 MoviePilot 通知。",
