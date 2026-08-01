@@ -80,6 +80,7 @@ const normalize = () => {
     max_retries: Number(source.max_retries ?? 3),
     retry_interval: Number(source.retry_interval ?? 30),
     rules: Array.isArray(source.rules) ? source.rules.map(normalizeRule) : [],
+    source_tag: source.source_tag ?? 'OpenList',
     openlist_items: Array.isArray(source.openlist_items) ? source.openlist_items : [],
   }
 };
@@ -106,6 +107,7 @@ const payload = computed(() => ({
   merge_delay: Number(form.merge_delay || 0),
   max_retries: Number(form.max_retries || 0),
   retry_interval: Number(form.retry_interval || 0),
+  source_tag: form.source_tag || '',
   rules: form.rules.map((rule, index) => ({
     id: rule.id || `${index + 1}`,
     enabled: !!rule.enabled,
@@ -201,7 +203,7 @@ return (_ctx, _cache) => {
     "min-height": "100%"
   }, {
     default: _withCtx(() => [
-      _cache[14] || (_cache[14] = _createElementVNode("div", { class: "d-flex align-start align-sm-center justify-space-between mb-8 flex-column flex-sm-row pr-12 pr-sm-0" }, [
+      _cache[15] || (_cache[15] = _createElementVNode("div", { class: "d-flex align-start align-sm-center justify-space-between mb-8 flex-column flex-sm-row pr-12 pr-sm-0" }, [
         _createElementVNode("div", null, [
           _createElementVNode("div", { class: "text-subtitle-1 font-weight-medium" }, "媒体整理 OpenList 上传"),
           _createElementVNode("div", { class: "text-body-2 text-medium-emphasis" }, " 整理完成后按启用规则上传命中的媒体库文件 ")
@@ -261,8 +263,26 @@ return (_ctx, _cache) => {
               }, {
                 default: _withCtx(() => [
                   _createVNode(_component_v_text_field, {
+                    modelValue: form.source_tag,
+                    "onUpdate:modelValue": _cache[3] || (_cache[3] = $event => ((form.source_tag) = $event)),
+                    density: "comfortable",
+                    "hide-details": "auto",
+                    label: "上传来源标记",
+                    placeholder: "OpenList；留空不添加",
+                    variant: "outlined"
+                  }, null, 8, ["modelValue"])
+                ]),
+                _: 1
+              }),
+              _createVNode(_component_v_col, {
+                cols: "12",
+                sm: "6",
+                lg: "3"
+              }, {
+                default: _withCtx(() => [
+                  _createVNode(_component_v_text_field, {
                     modelValue: form.merge_delay,
-                    "onUpdate:modelValue": _cache[3] || (_cache[3] = $event => ((form.merge_delay) = $event)),
+                    "onUpdate:modelValue": _cache[4] || (_cache[4] = $event => ((form.merge_delay) = $event)),
                     modelModifiers: { number: true },
                     density: "comfortable",
                     "hide-details": "auto",
@@ -283,7 +303,7 @@ return (_ctx, _cache) => {
                 default: _withCtx(() => [
                   _createVNode(_component_v_text_field, {
                     modelValue: form.max_retries,
-                    "onUpdate:modelValue": _cache[4] || (_cache[4] = $event => ((form.max_retries) = $event)),
+                    "onUpdate:modelValue": _cache[5] || (_cache[5] = $event => ((form.max_retries) = $event)),
                     modelModifiers: { number: true },
                     density: "comfortable",
                     "hide-details": "auto",
@@ -304,7 +324,7 @@ return (_ctx, _cache) => {
                 default: _withCtx(() => [
                   _createVNode(_component_v_text_field, {
                     modelValue: form.retry_interval,
-                    "onUpdate:modelValue": _cache[5] || (_cache[5] = $event => ((form.retry_interval) = $event)),
+                    "onUpdate:modelValue": _cache[6] || (_cache[6] = $event => ((form.retry_interval) = $event)),
                     modelModifiers: { number: true },
                     density: "comfortable",
                     "hide-details": "auto",
@@ -325,7 +345,7 @@ return (_ctx, _cache) => {
       _createElementVNode("div", _hoisted_4, [
         _createElementVNode("div", _hoisted_5, [
           _createElementVNode("div", _hoisted_6, [
-            _cache[8] || (_cache[8] = _createElementVNode("div", { class: "text-subtitle-1 font-weight-medium" }, "上传规则", -1)),
+            _cache[9] || (_cache[9] = _createElementVNode("div", { class: "text-subtitle-1 font-weight-medium" }, "上传规则", -1)),
             _createElementVNode("div", _hoisted_7, _toDisplayString(ruleSummary.value), 1)
           ]),
           _createVNode(_component_v_btn, {
@@ -335,7 +355,7 @@ return (_ctx, _cache) => {
             variant: "tonal",
             onClick: addRule
           }, {
-            default: _withCtx(() => [...(_cache[9] || (_cache[9] = [
+            default: _withCtx(() => [...(_cache[10] || (_cache[10] = [
               _createTextVNode("新增规则", -1)
             ]))]),
             _: 1
@@ -348,7 +368,7 @@ return (_ctx, _cache) => {
               type: "warning",
               variant: "tonal"
             }, {
-              default: _withCtx(() => [...(_cache[10] || (_cache[10] = [
+              default: _withCtx(() => [...(_cache[11] || (_cache[11] = [
                 _createTextVNode(" 当前没有上传规则，插件启用后也不会执行上传。 ", -1)
               ]))]),
               _: 1
@@ -356,7 +376,7 @@ return (_ctx, _cache) => {
           : (_openBlock(), _createBlock(_component_v_expansion_panels, {
               key: 1,
               modelValue: expandedRules.value,
-              "onUpdate:modelValue": _cache[6] || (_cache[6] = $event => ((expandedRules).value = $event)),
+              "onUpdate:modelValue": _cache[7] || (_cache[7] = $event => ((expandedRules).value = $event)),
               multiple: "",
               variant: "accordion"
             }, {
@@ -596,7 +616,7 @@ return (_ctx, _cache) => {
         type: "info",
         variant: "tonal"
       }, {
-        default: _withCtx(() => [...(_cache[11] || (_cache[11] = [
+        default: _withCtx(() => [...(_cache[12] || (_cache[12] = [
           _createElementVNode("div", { class: "mb-1" }, [
             _createElementVNode("strong", null, "合并等待："),
             _createTextVNode("接收到整理事件后等待的时间，用于将短时间内同一媒体的多个文件合并为一次任务。")
@@ -609,11 +629,17 @@ return (_ctx, _cache) => {
             _createElementVNode("code", null, "/115/Media"),
             _createTextVNode("）。未匹配规则的事件将被忽略。")
           ], -1),
-          _createElementVNode("div", null, [
+          _createElementVNode("div", { class: "mb-1" }, [
             _createElementVNode("strong", null, "排除后缀："),
             _createTextVNode("多个后缀使用英文逗号分隔（如 "),
             _createElementVNode("code", null, ".tmp,.part"),
             _createTextVNode("）。")
+          ], -1),
+          _createElementVNode("div", null, [
+            _createElementVNode("strong", null, "上传来源标记："),
+            _createTextVNode("仅对视频文件名追加来源信息，如 "),
+            _createElementVNode("code", null, "流浪地球 (2019) [OpenList].mkv"),
+            _createTextVNode("；留空则保持原文件名。")
           ], -1)
         ]))]),
         _: 1
@@ -622,9 +648,9 @@ return (_ctx, _cache) => {
         _createVNode(_component_v_btn, {
           class: "flex-grow-1 flex-sm-grow-0",
           variant: "tonal",
-          onClick: _cache[7] || (_cache[7] = $event => (emit('switch')))
+          onClick: _cache[8] || (_cache[8] = $event => (emit('switch')))
         }, {
-          default: _withCtx(() => [...(_cache[12] || (_cache[12] = [
+          default: _withCtx(() => [...(_cache[13] || (_cache[13] = [
             _createTextVNode("查看结果", -1)
           ]))]),
           _: 1
@@ -637,7 +663,7 @@ return (_ctx, _cache) => {
           variant: "text",
           onClick: saveConfig
         }, {
-          default: _withCtx(() => [...(_cache[13] || (_cache[13] = [
+          default: _withCtx(() => [...(_cache[14] || (_cache[14] = [
             _createTextVNode("保存", -1)
           ]))]),
           _: 1
@@ -650,6 +676,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-e252453d"]]);
+const Config = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-82fb937a"]]);
 
 export { Config as default };

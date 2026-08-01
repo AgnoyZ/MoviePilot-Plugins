@@ -49,6 +49,7 @@ const normalize = () => {
     max_retries: Number(source.max_retries ?? 3),
     retry_interval: Number(source.retry_interval ?? 30),
     rules: Array.isArray(source.rules) ? source.rules.map(normalizeRule) : [],
+    source_tag: source.source_tag ?? 'OpenList',
     openlist_items: Array.isArray(source.openlist_items) ? source.openlist_items : [],
   }
 }
@@ -75,6 +76,7 @@ const payload = computed(() => ({
   merge_delay: Number(form.merge_delay || 0),
   max_retries: Number(form.max_retries || 0),
   retry_interval: Number(form.retry_interval || 0),
+  source_tag: form.source_tag || '',
   rules: form.rules.map((rule, index) => ({
     id: rule.id || `${index + 1}`,
     enabled: !!rule.enabled,
@@ -185,6 +187,16 @@ onMounted(async () => {
               item-title="title"
               item-value="value"
               label="OpenList 配置"
+              variant="outlined"
+            />
+          </v-col>
+          <v-col cols="12" sm="6" lg="3">
+            <v-text-field
+              v-model="form.source_tag"
+              density="comfortable"
+              hide-details="auto"
+              label="上传来源标记"
+              placeholder="OpenList；留空不添加"
               variant="outlined"
             />
           </v-col>
@@ -399,7 +411,8 @@ onMounted(async () => {
     <v-alert class="mb-5 text-body-2" density="comfortable" type="info" variant="tonal">
       <div class="mb-1"><strong>合并等待：</strong>接收到整理事件后等待的时间，用于将短时间内同一媒体的多个文件合并为一次任务。</div>
       <div class="mb-1"><strong>目录填写：</strong>【媒体库目录】为映射到MoviePilot内的路径（如 <code>/media/anime</code>），【OpenList 目标目录】为OpenList目录路径（如 <code>/115/Media</code>）。未匹配规则的事件将被忽略。</div>
-      <div><strong>排除后缀：</strong>多个后缀使用英文逗号分隔（如 <code>.tmp,.part</code>）。</div>
+      <div class="mb-1"><strong>排除后缀：</strong>多个后缀使用英文逗号分隔（如 <code>.tmp,.part</code>）。</div>
+      <div><strong>上传来源标记：</strong>仅对视频文件名追加来源信息，如 <code>流浪地球 (2019) [OpenList].mkv</code>；留空则保持原文件名。</div>
     </v-alert>
 
     <div class="d-flex align-center flex-wrap gap-2 pt-4 mt-5 position-sticky bottom-0 bg-surface border-t-sm" style="z-index: 1;">
